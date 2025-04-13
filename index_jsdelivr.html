@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3D Box Viewer</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #000;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+
+    <script type="module">
+      import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js";
+      import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/loaders/GLTFLoader.js";
+      import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/controls/OrbitControls.js";
+
+      const canvas = document.getElementById("canvas");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 1.5, 8);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 1.5);
+      const directional = new THREE.DirectionalLight(0xffffff, 2);
+      directional.position.set(5, 10, 7);
+      scene.add(ambient, directional);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.1;
+      controls.rotateSpeed = 1.0;
+      controls.enableZoom = true;
+      controls.enableRotate = true;
+      controls.enablePan = true;
+      controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.PAN,
+        RIGHT: THREE.MOUSE.ROTATE,
+      };
+      controls.screenSpacePanning = true;
+      controls.minAzimuthAngle = -Infinity;
+      controls.maxAzimuthAngle = Infinity;
+      controls.minPolarAngle = -Infinity;
+      controls.maxPolarAngle = Infinity;
+      controls.target.set(0, 0.75, 0);
+      controls.update();
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      let modelRoot = null;
+
+      const loader = new GLTFLoader();
+      loader.load("box.glb", (gltf) => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        model.position.sub(center);
+        model.position.x += 0.8;
+        model.position.y += 2.0;
+        model.rotation.x = Math.PI / 2;
+        model.scale.set(1.5, 1.5, 1.5);
+        scene.add(model);
+        modelRoot = model;
+
+        const mixer = new THREE.AnimationMixer(model);
+        const clip = gltf.animations[0];
+        const action = mixer.clipAction(clip);
+        action.play();
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        mixer.setTime(clip.duration);
+
+        animate();
+      });
+
+      canvas.addEventListener("pointerdown", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(pointer, camera);
+        const intersects = raycaster.intersectObjects(scene.children.filter(obj => obj !== modelRoot), true);
+
+        if (intersects.length > 0) {
+          const point = intersects[0].point;
+          const blendFactor = 0.2;
+          controls.target.lerp(point, blendFactor);
+          controls.update();
+        }
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>
